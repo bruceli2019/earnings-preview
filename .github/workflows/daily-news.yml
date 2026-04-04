@@ -1,0 +1,75 @@
+name: Daily News Summary
+
+on:
+  schedule:
+    # Every day at 7:00 AM ET (11:00 UTC)
+    - cron: "0 11 * * *"
+  workflow_dispatch: # Manual trigger
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -e ".[ai]"
+
+      - name: Generate newsletter
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          earnings-analyzer news --output-dir ./site --no-analyze
+          # Re-run with analysis if API key is available
+          if [ -n "$ANTHROPIC_API_KEY" ]; then
+            earnings-analyzer news --output-dir ./site --analyze
+          fi
+
+      - name: Build index page
+        run: |
+          cd site
+          # Create an index.html that redirects to the latest newsletter
+          LATEST=$(ls -t news-summary-*.html 2>/dev/null | head -1)
+          if [ -n "$LATEST" ]; then
+            cat > index.html << HTMLEOF
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta http-equiv="refresh" content="0; url=${LATEST}">
+            <title>Daily News Summary</title>
+          </head>
+          <body>
+            <p>Redirecting to <a href="${LATEST}">latest summary</a>...</p>
+          </body>
+          </html>
+          HTMLEOF
+          fi
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./site
+
+  deploy:
+    needs: generate
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
