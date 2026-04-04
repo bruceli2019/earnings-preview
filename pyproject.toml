@@ -12,6 +12,9 @@ dependencies = [
     "click>=8.1",
 ]
 
+[project.optional-dependencies]
+ai = ["anthropic>=0.40"]
+
 [project.scripts]
 earnings-analyzer = "earnings_analyzer.cli:main"
 earnings-news = "earnings_analyzer.cli:daily_news"

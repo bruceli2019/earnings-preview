@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import re
+
 import click
 from rich.console import Console
 
 from earnings_analyzer.analyzer import analyze_earnings
 
 console = Console()
+
+_TICKER_RE = re.compile(r"^[A-Za-z0-9.\-]{1,10}$")
 
 
 @click.group(invoke_without_command=True)
@@ -23,6 +27,9 @@ def main(ctx: click.Context) -> None:
 @click.argument("ticker")
 def earnings(ticker: str) -> None:
     """Analyze quarterly earnings for TICKER (e.g., AAPL, MSFT)."""
+    if not _TICKER_RE.match(ticker):
+        console.print("[red]Invalid ticker format.[/red]")
+        raise click.Abort()
     try:
         analyze_earnings(ticker)
     except KeyboardInterrupt:
@@ -48,8 +55,14 @@ def earnings(ticker: str) -> None:
 @click.option(
     "--headlines",
     default=None,
-    type=int,
-    help="Number of Techmeme headlines to include.",
+    type=click.IntRange(1, 100),
+    help="Number of Techmeme headlines (1-100).",
+)
+@click.option(
+    "--analyze/--no-analyze",
+    "run_analysis",
+    default=True,
+    help="Run AI analysis on collected headlines (requires ANTHROPIC_API_KEY).",
 )
 @click.option(
     "--open/--no-open",
@@ -61,16 +74,19 @@ def daily_news(
     config_path: str | None,
     output_dir: str | None,
     headlines: int | None,
+    run_analysis: bool,
     open_browser: bool,
 ) -> None:
     """Generate today's daily news summary as an HTML newsletter.
 
-    Pulls headlines from Techmeme and provides curated links to
-    X, Financial Times, and Spotify podcasts.
+    Pulls headlines from Techmeme, Hacker News, Reddit, and SEC EDGAR,
+    then runs AI analysis to separate signal from noise.  Includes
+    curated links to X, Financial Times, and Spotify podcasts.
 
     Customize sources by creating a news_config.json file or
     passing --config.
     """
+    from earnings_analyzer.news_analyzer import analyze_news
     from earnings_analyzer.news_config import NewsConfig
     from earnings_analyzer.news_sources import gather_daily_news
     from earnings_analyzer.newsletter import save_newsletter
@@ -79,6 +95,9 @@ def daily_news(
         cfg = NewsConfig.load(config_path)
 
         if output_dir is not None:
+            if ".." in output_dir:
+                console.print("[red]--output-dir must not contain '..'[/red]")
+                raise click.Abort()
             cfg.output_dir = output_dir
         if headlines is not None:
             cfg.techmeme_count = headlines
@@ -86,19 +105,45 @@ def daily_news(
         console.print("[bold cyan]Gathering daily news...[/bold cyan]")
         news = gather_daily_news(
             techmeme_count=cfg.techmeme_count,
+            hn_count=cfg.hn_count,
+            reddit_count=cfg.reddit_count,
+            sec_count=cfg.sec_count,
             x_topics=cfg.x_topics,
             ft_sections=cfg.ft_sections,
             spotify_podcasts=cfg.spotify_podcasts,
+            reddit_subreddits=cfg.reddit_subreddits,
+            sec_form_types=cfg.sec_form_types,
         )
+
+        total = (
+            len(news.techmeme_headlines)
+            + len(news.hacker_news)
+            + len(news.reddit_finance)
+            + len(news.sec_filings)
+        )
+        console.print(f"  [dim]Collected {total} items from live sources[/dim]")
+
+        if run_analysis:
+            console.print("[bold cyan]Running AI analysis...[/bold cyan]")
+            news.analysis = analyze_news(news, api_key=cfg.anthropic_api_key)
+            if "unavailable" in news.analysis.lower():
+                console.print(
+                    "  [yellow]AI analysis unavailable — "
+                    "set ANTHROPIC_API_KEY for full brief[/yellow]"
+                )
+            else:
+                console.print("  [dim]Analysis complete[/dim]")
 
         filepath = save_newsletter(news, output_dir=cfg.output_dir)
 
-        n_tech = len(news.techmeme_headlines)
         console.print(
-            f"[green]Newsletter saved:[/green] {filepath}\n"
-            f"  [dim]{n_tech} Techmeme headlines, "
-            f"{len(news.x_links)} X links, "
-            f"{len(news.ft_links)} FT links, "
+            f"\n[green]Newsletter saved:[/green] {filepath}\n"
+            f"  [dim]{len(news.techmeme_headlines)} Techmeme, "
+            f"{len(news.hacker_news)} HN, "
+            f"{len(news.reddit_finance)} Reddit, "
+            f"{len(news.sec_filings)} SEC, "
+            f"{len(news.x_links)} X, "
+            f"{len(news.ft_links)} FT, "
             f"{len(news.spotify_links)} podcasts[/dim]"
         )
 
