@@ -82,7 +82,7 @@ def _render_analysis_section(analysis_md: str) -> str:
 
 def render_newsletter(news: DailyNewsSources) -> str:
     """Generate a complete HTML newsletter string."""
-    formatted_date = news.date.strftime("%A, %B %-d, %Y")
+    formatted_date = news.date.strftime("%A, %B %d, %Y").replace(" 0", " ")
 
     sections = [
         _render_analysis_section(news.analysis),

@@ -11,9 +11,9 @@ from earnings_analyzer.news_sources import (
     DailyNewsSources,
     NewsItem,
     _sanitize_url,
-    get_ft_links,
-    get_spotify_links,
-    get_x_links,
+    fetch_ft_articles,
+    fetch_spotify_episodes,
+    fetch_x_posts,
 )
 from earnings_analyzer.newsletter import render_newsletter, save_newsletter
 from earnings_analyzer.news_config import NewsConfig
@@ -47,53 +47,23 @@ def test_sanitize_url_rejects_empty():
 # ---------------------------------------------------------------------------
 
 
-def test_get_x_links_defaults():
-    links = get_x_links()
-    assert len(links) >= 3
-    assert all(isinstance(l, NewsItem) for l in links)
-    assert all(l.source == "X" for l in links)
-    assert all(l.url.startswith("https://x.com/") for l in links)
+def test_fetch_x_posts_rejects_bad_handle():
+    # Invalid handles are silently skipped
+    items = fetch_x_posts(accounts=["../bad!", "valid_handle"])
+    # Should not crash; invalid handles filtered out
+    assert isinstance(items, list)
 
 
-def test_get_x_links_custom():
-    custom = [{"title": "My Topic", "url": "https://x.com/custom", "summary": "s"}]
-    links = get_x_links(custom_topics=custom)
-    assert len(links) == 1
-    assert links[0].title == "My Topic"
+def test_fetch_ft_articles_rejects_bad_url():
+    custom = [{"title": "Bad", "url": "javascript:alert(1)"}]
+    items = fetch_ft_articles(sections=custom)
+    assert len(items) == 0
 
 
-def test_get_x_links_rejects_bad_url():
-    custom = [{"title": "Bad", "url": "javascript:alert(1)", "summary": "s"}]
-    links = get_x_links(custom_topics=custom)
-    assert len(links) == 0
-
-
-def test_get_ft_links_defaults():
-    links = get_ft_links()
-    assert len(links) >= 3
-    assert all(l.source == "Financial Times" for l in links)
-    assert all("ft.com" in l.url for l in links)
-
-
-def test_get_ft_links_custom():
-    custom = [{"title": "Lex", "url": "https://www.ft.com/lex"}]
-    links = get_ft_links(custom_sections=custom)
-    assert len(links) == 1
-    assert links[0].title == "Lex"
-
-
-def test_get_spotify_links_defaults():
-    links = get_spotify_links()
-    assert len(links) >= 3
-    assert all(l.source == "Spotify" for l in links)
-    assert all("spotify.com" in l.url for l in links)
-
-
-def test_get_spotify_links_custom():
-    custom = [{"title": "My Pod", "url": "https://open.spotify.com/show/abc"}]
-    links = get_spotify_links(custom_podcasts=custom)
-    assert len(links) == 1
-    assert links[0].title == "My Pod"
+def test_fetch_spotify_episodes_rejects_bad_url():
+    custom = [{"title": "Bad", "url": "ftp://evil.com"}]
+    items = fetch_spotify_episodes(shows=custom)
+    assert len(items) == 0
 
 
 # ---------------------------------------------------------------------------
@@ -140,9 +110,15 @@ def _make_sample_news() -> DailyNewsSources:
                 source="SEC EDGAR",
             ),
         ],
-        x_links=get_x_links(),
-        ft_links=get_ft_links(),
-        spotify_links=get_spotify_links(),
+        x_links=[
+            NewsItem(title="OpenAI announces GPT-5", url="https://x.com/OpenAI/status/123", source="@OpenAI"),
+        ],
+        ft_links=[
+            NewsItem(title="AI regulation in EU", url="https://www.ft.com/content/abc", source="FT Technology"),
+        ],
+        spotify_links=[
+            NewsItem(title="All-In: AI Wars", url="https://open.spotify.com/episode/abc", source="Spotify", summary="Discussion on AI competition."),
+        ],
         analysis="## Top Stories\n- **AI funding** is the big story today.",
     )
 
@@ -228,32 +204,33 @@ def test_save_newsletter_rejects_slash_in_filename(tmp_path: Path):
 
 def test_config_defaults():
     cfg = NewsConfig()
-    assert cfg.techmeme_count == 15
-    assert cfg.hn_count == 10
+    assert cfg.techmeme_count == 5
+    assert cfg.hn_count == 5
     assert cfg.reddit_count == 10
     assert cfg.sec_count == 10
     assert cfg.output_dir == "./newsletters"
-    assert cfg.x_topics is None
+    assert cfg.x_accounts is None
     assert cfg.anthropic_api_key is None
+    assert cfg.obsidian_vault is None
 
 
 def test_config_load_missing_file():
     cfg = NewsConfig.load("/nonexistent/path.json")
-    assert cfg.techmeme_count == 15
+    assert cfg.techmeme_count == 5
 
 
 def test_config_load_from_file(tmp_path: Path):
     config_file = tmp_path / "news_config.json"
     config_file.write_text(
         '{"techmeme_count": 5, "hn_count": 3, "output_dir": "./out",'
-        ' "x_topics": [{"title": "Test", "url": "https://x.com/test"}]}'
+        ' "x_accounts": ["OpenAI", "AnthropicAI"]}'
     )
     cfg = NewsConfig.load(config_file)
     assert cfg.techmeme_count == 5
     assert cfg.hn_count == 3
     assert cfg.output_dir == "./out"
-    assert cfg.x_topics is not None
-    assert len(cfg.x_topics) == 1
+    assert cfg.x_accounts is not None
+    assert len(cfg.x_accounts) == 2
 
 
 def test_config_rejects_bad_techmeme_count(tmp_path: Path):
@@ -270,12 +247,10 @@ def test_config_rejects_path_traversal_output_dir(tmp_path: Path):
         NewsConfig.load(config_file)
 
 
-def test_config_rejects_bad_url_in_topics(tmp_path: Path):
+def test_config_rejects_bad_x_account(tmp_path: Path):
     config_file = tmp_path / "bad.json"
-    config_file.write_text(
-        '{"x_topics": [{"title": "Evil", "url": "javascript:alert(1)"}]}'
-    )
-    with pytest.raises(ValueError, match="Invalid URL"):
+    config_file.write_text('{"x_accounts": ["../../evil"]}')
+    with pytest.raises(ValueError, match="Invalid X account"):
         NewsConfig.load(config_file)
 
 

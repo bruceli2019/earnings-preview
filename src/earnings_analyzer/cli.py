@@ -70,12 +70,26 @@ def earnings(ticker: str) -> None:
     default=False,
     help="Open the newsletter in a browser after generation.",
 )
+@click.option(
+    "--obsidian-vault",
+    default=None,
+    type=click.Path(exists=False),
+    help="Path to Obsidian vault to export daily note (overrides config).",
+)
+@click.option(
+    "--date",
+    "override_date",
+    default=None,
+    help="Override the note date (YYYY-MM-DD). Content is still live news.",
+)
 def daily_news(
     config_path: str | None,
     output_dir: str | None,
     headlines: int | None,
     run_analysis: bool,
     open_browser: bool,
+    obsidian_vault: str | None,
+    override_date: str | None,
 ) -> None:
     """Generate today's daily news summary as an HTML newsletter.
 
@@ -90,6 +104,7 @@ def daily_news(
     from earnings_analyzer.news_config import NewsConfig
     from earnings_analyzer.news_sources import gather_daily_news
     from earnings_analyzer.newsletter import save_newsletter
+    from earnings_analyzer.obsidian import export_to_obsidian
 
     try:
         cfg = NewsConfig.load(config_path)
@@ -101,6 +116,18 @@ def daily_news(
             cfg.output_dir = output_dir
         if headlines is not None:
             cfg.techmeme_count = headlines
+        if obsidian_vault is not None:
+            cfg.obsidian_vault = obsidian_vault
+
+        # Parse optional date override
+        note_date = None
+        if override_date:
+            from datetime import date as _date
+            try:
+                note_date = _date.fromisoformat(override_date)
+            except ValueError:
+                console.print(f"[red]Invalid date format: {override_date} (use YYYY-MM-DD)[/red]")
+                raise click.Abort()
 
         console.print("[bold cyan]Gathering daily news...[/bold cyan]")
         news = gather_daily_news(
@@ -108,12 +135,15 @@ def daily_news(
             hn_count=cfg.hn_count,
             reddit_count=cfg.reddit_count,
             sec_count=cfg.sec_count,
-            x_topics=cfg.x_topics,
+            x_accounts=cfg.x_accounts,
             ft_sections=cfg.ft_sections,
             spotify_podcasts=cfg.spotify_podcasts,
             reddit_subreddits=cfg.reddit_subreddits,
             sec_form_types=cfg.sec_form_types,
         )
+
+        if note_date:
+            news.date = note_date
 
         total = (
             len(news.techmeme_headlines)
@@ -146,6 +176,11 @@ def daily_news(
             f"{len(news.ft_links)} FT, "
             f"{len(news.spotify_links)} podcasts[/dim]"
         )
+
+        if cfg.obsidian_vault:
+            console.print("[bold cyan]Exporting to Obsidian vault...[/bold cyan]")
+            vault_path = export_to_obsidian(news, vault_path=cfg.obsidian_vault)
+            console.print(f"  [green]Obsidian note saved:[/green] {vault_path}")
 
         if open_browser:
             import webbrowser

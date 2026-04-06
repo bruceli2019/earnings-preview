@@ -82,7 +82,7 @@ def _safe_get(url: str, **kwargs: object) -> httpx.Response:
 _TECHMEME_URL = "https://www.techmeme.com/"
 
 
-def fetch_techmeme_headlines(max_items: int = 15) -> list[NewsItem]:
+def fetch_techmeme_headlines(max_items: int = 5) -> list[NewsItem]:
     """Scrape top headlines from Techmeme's front page."""
     max_items = min(max(1, max_items), 100)
     try:
@@ -124,7 +124,7 @@ def fetch_techmeme_headlines(max_items: int = 15) -> list[NewsItem]:
 _HN_API = "https://hacker-news.firebaseio.com/v0"
 
 
-def fetch_hacker_news(max_items: int = 10, min_score: int = 50) -> list[NewsItem]:
+def fetch_hacker_news(max_items: int = 5, min_score: int = 50) -> list[NewsItem]:
     """Fetch top Hacker News stories above *min_score*."""
     max_items = min(max(1, max_items), 100)
     try:
@@ -288,134 +288,281 @@ def fetch_sec_filings(
 
 
 # ---------------------------------------------------------------------------
-# Curated X (Twitter) topic links
+# X / Twitter — fetch actual posts from AI-focused accounts
 # ---------------------------------------------------------------------------
 
-_DEFAULT_X_TOPICS: list[dict[str, str]] = [
-    {
-        "title": "Trending in Tech",
-        "url": "https://x.com/search?q=%23tech&src=trend_click&vertical=trends",
-        "summary": "Latest trending tech discussions on X",
-    },
-    {
-        "title": "Markets & Finance",
-        "url": "https://x.com/search?q=%23markets%20OR%20%23finance&f=live",
-        "summary": "Live market and finance posts",
-    },
-    {
-        "title": "Earnings Season",
-        "url": "https://x.com/search?q=%23earnings%20OR%20%23earningsseason&f=live",
-        "summary": "Earnings announcements and reactions",
-    },
-    {
-        "title": "AI & Machine Learning",
-        "url": "https://x.com/search?q=%23AI%20OR%20%23MachineLearning&f=live",
-        "summary": "AI and ML news and discussions",
-    },
+_DEFAULT_X_ACCOUNTS = [
+    "OpenAI",
+    "AnthropicAI",
+    "GoogleDeepMind",
+    "xaboratory",  # AI research
+    "kaboratory",  # ML papers
 ]
 
+_SYNDICATION_URL = "https://syndication.twitter.com/srv/timeline-profile/screen-name"
 
-def get_x_links(custom_topics: list[dict[str, str]] | None = None) -> list[NewsItem]:
-    """Return curated X search/topic links."""
-    topics = custom_topics or _DEFAULT_X_TOPICS
-    return [
-        NewsItem(
-            title=t["title"][:300],
-            url=_sanitize_url(t["url"]) or "",
-            source="X",
-            summary=t.get("summary", "")[:200],
-        )
-        for t in topics
-        if _sanitize_url(t.get("url", ""))
-    ]
+
+def fetch_x_posts(
+    accounts: list[str] | None = None,
+    max_per_account: int = 3,
+) -> list[NewsItem]:
+    """Fetch recent posts from specific X accounts via syndication embeds.
+
+    Falls back gracefully if X blocks the request.
+    """
+    accts = accounts or _DEFAULT_X_ACCOUNTS
+    items: list[NewsItem] = []
+
+    for handle in accts:
+        if not re.match(r"^[A-Za-z0-9_]{1,30}$", handle):
+            continue
+        try:
+            resp = _safe_get(
+                f"{_SYNDICATION_URL}/{handle}",
+                headers={
+                    "User-Agent": _USER_AGENT,
+                    "Referer": "https://platform.twitter.com/",
+                },
+            )
+        except (httpx.HTTPError, ValueError):
+            continue
+
+        soup = BeautifulSoup(resp.text, "lxml")
+        count = 0
+        for tweet_div in soup.select("[data-tweet-id]"):
+            text_el = tweet_div.select_one(".timeline-Tweet-text")
+            if text_el is None:
+                continue
+            text = text_el.get_text(strip=True)[:300]
+            if not text:
+                continue
+            tweet_id = tweet_div.get("data-tweet-id", "")
+            url = f"https://x.com/{handle}/status/{tweet_id}"
+
+            items.append(
+                NewsItem(
+                    title=text,
+                    url=url,
+                    source=f"@{handle}",
+                    summary="",
+                )
+            )
+            count += 1
+            if count >= max_per_account:
+                break
+
+    return items
 
 
 # ---------------------------------------------------------------------------
-# Curated FT links
+# Financial Times — scrape actual article headlines
 # ---------------------------------------------------------------------------
 
 _DEFAULT_FT_SECTIONS: list[dict[str, str]] = [
-    {
-        "title": "FT Home",
-        "url": "https://www.ft.com/",
-        "summary": "Today's top stories from the Financial Times",
-    },
-    {
-        "title": "Markets",
-        "url": "https://www.ft.com/markets",
-        "summary": "Global markets overview and analysis",
-    },
-    {
-        "title": "Technology",
-        "url": "https://www.ft.com/technology",
-        "summary": "Tech sector news and analysis",
-    },
-    {
-        "title": "Companies",
-        "url": "https://www.ft.com/companies",
-        "summary": "Corporate news, earnings, and M&A",
-    },
+    {"title": "Technology", "url": "https://www.ft.com/technology"},
+    {"title": "Artificial Intelligence", "url": "https://www.ft.com/artificial-intelligence"},
 ]
 
 
-def get_ft_links(custom_sections: list[dict[str, str]] | None = None) -> list[NewsItem]:
-    """Return curated FT section links."""
-    sections = custom_sections or _DEFAULT_FT_SECTIONS
-    return [
-        NewsItem(
-            title=s["title"][:300],
-            url=_sanitize_url(s["url"]) or "",
-            source="Financial Times",
-            summary=s.get("summary", "")[:200],
-        )
-        for s in sections
-        if _sanitize_url(s.get("url", ""))
-    ]
+def fetch_ft_articles(
+    sections: list[dict[str, str]] | None = None,
+    max_per_section: int = 5,
+) -> list[NewsItem]:
+    """Scrape actual article headlines from FT section pages."""
+    ft_sections = sections or _DEFAULT_FT_SECTIONS
+    items: list[NewsItem] = []
+    seen: set[str] = set()
+
+    for section in ft_sections:
+        url = _sanitize_url(section.get("url", ""))
+        if not url:
+            continue
+        try:
+            resp = _safe_get(url)
+        except (httpx.HTTPError, ValueError):
+            continue
+
+        soup = BeautifulSoup(resp.text, "lxml")
+        count = 0
+        # FT uses <a> tags with data-trackable="heading-link" for article links
+        for link in soup.select('a[data-trackable="heading-link"], .o-teaser__heading a'):
+            title = link.get_text(strip=True)[:300]
+            href = link.get("href", "")
+            if not title or title in seen:
+                continue
+            if href.startswith("/"):
+                href = f"https://www.ft.com{href}"
+            article_url = _sanitize_url(href)
+            if not article_url:
+                continue
+            seen.add(title)
+
+            # Try to get standfirst/summary
+            parent = link.find_parent(class_=re.compile(r"teaser|story"))
+            summary = ""
+            if parent:
+                standfirst = parent.select_one(
+                    '.o-teaser__standfirst, [data-trackable="standfirst"]'
+                )
+                if standfirst:
+                    summary = standfirst.get_text(strip=True)[:200]
+
+            items.append(
+                NewsItem(
+                    title=title,
+                    url=article_url,
+                    source=f"FT {section['title']}",
+                    summary=summary,
+                )
+            )
+            count += 1
+            if count >= max_per_section:
+                break
+
+    return items
 
 
 # ---------------------------------------------------------------------------
-# Curated Spotify podcast links
+# Spotify — fetch actual episodes with descriptions
 # ---------------------------------------------------------------------------
 
-_DEFAULT_SPOTIFY_PODCASTS: list[dict[str, str]] = [
-    {
-        "title": "Bloomberg Surveillance",
-        "url": "https://open.spotify.com/show/0CkTj9Pt3kOT3kSBLgFNEE",
-        "summary": "Daily markets, economics, and politics from Bloomberg",
-    },
+_DEFAULT_SPOTIFY_SHOWS: list[dict[str, str]] = [
     {
         "title": "The All-In Podcast",
         "url": "https://open.spotify.com/show/2IqXAVFR4e0Bmyjsdc8QzF",
-        "summary": "Tech, business, and politics with Silicon Valley insiders",
     },
     {
         "title": "Acquired",
         "url": "https://open.spotify.com/show/7Fj0XEuUQLbqnTICXBSKAE",
-        "summary": "Deep dives into great technology companies and IPOs",
+    },
+    {
+        "title": "Lex Fridman Podcast",
+        "url": "https://open.spotify.com/show/2MAi0BvDc6GTFvKFPXnkCL",
     },
     {
         "title": "Odd Lots (Bloomberg)",
         "url": "https://open.spotify.com/show/35IczmCnU09IEcz5P5jZ89",
-        "summary": "Exploring unusual stories in finance and economics",
     },
 ]
 
+_SPOTIFY_OEMBED = "https://open.spotify.com/oembed"
 
-def get_spotify_links(
-    custom_podcasts: list[dict[str, str]] | None = None,
+
+def fetch_spotify_episodes(
+    shows: list[dict[str, str]] | None = None,
+    max_episodes: int = 1,
 ) -> list[NewsItem]:
-    """Return curated Spotify podcast links."""
-    podcasts = custom_podcasts or _DEFAULT_SPOTIFY_PODCASTS
-    return [
-        NewsItem(
-            title=p["title"][:300],
-            url=_sanitize_url(p["url"]) or "",
-            source="Spotify",
-            summary=p.get("summary", "")[:200],
-        )
-        for p in podcasts
-        if _sanitize_url(p.get("url", ""))
-    ]
+    """Fetch the latest episode from each Spotify podcast with description.
+
+    Scrapes the show page for episode links and uses oEmbed for metadata.
+    """
+    podcast_list = shows or _DEFAULT_SPOTIFY_SHOWS
+    items: list[NewsItem] = []
+
+    for show in podcast_list:
+        show_url = _sanitize_url(show.get("url", ""))
+        if not show_url:
+            continue
+        show_title = show.get("title", "Podcast")
+
+        try:
+            resp = _safe_get(show_url)
+        except (httpx.HTTPError, ValueError):
+            continue
+
+        soup = BeautifulSoup(resp.text, "lxml")
+
+        # Spotify embeds episode data in JSON-LD or meta tags
+        import json as _json
+
+        episode_links: list[tuple[str, str, str]] = []  # (url, title, desc)
+
+        # Try parsing JSON-LD for episode data
+        for script in soup.select('script[type="application/ld+json"]'):
+            try:
+                ld = _json.loads(script.string or "")
+            except (ValueError, TypeError):
+                continue
+            # PodcastSeries schema includes episodes
+            episodes = []
+            if isinstance(ld, dict):
+                episodes = ld.get("episode", [])
+                if isinstance(episodes, dict):
+                    episodes = [episodes]
+            for ep in episodes[:max_episodes]:
+                ep_url = ep.get("url", "")
+                ep_title = ep.get("name", "")[:300]
+                ep_desc = ep.get("description", "")[:500]
+                if ep_url and ep_title:
+                    episode_links.append((ep_url, ep_title, ep_desc))
+
+        # Fallback: look for episode links in the page HTML
+        if not episode_links:
+            for link in soup.select('a[href*="/episode/"]'):
+                href = link.get("href", "")
+                title = link.get_text(strip=True)[:300]
+                if href.startswith("/"):
+                    href = f"https://open.spotify.com{href}"
+                ep_url = _sanitize_url(href)
+                if ep_url and title and len(title) > 5:
+                    episode_links.append((ep_url, title, ""))
+                    if len(episode_links) >= max_episodes:
+                        break
+
+        # Fallback: use oEmbed to get at least the show description
+        if not episode_links:
+            try:
+                oembed_resp = _safe_get(
+                    _SPOTIFY_OEMBED, params={"url": show_url}
+                )
+                oembed = oembed_resp.json()
+                items.append(
+                    NewsItem(
+                        title=f"{show_title}: Latest Episode",
+                        url=show_url,
+                        source="Spotify",
+                        summary=oembed.get("title", "")[:200],
+                    )
+                )
+            except (httpx.HTTPError, ValueError, KeyError):
+                pass
+            continue
+
+        for ep_url, ep_title, ep_desc in episode_links:
+            # If we don't have a description, try fetching the episode page
+            if not ep_desc:
+                try:
+                    ep_resp = _safe_get(ep_url)
+                    ep_soup = BeautifulSoup(ep_resp.text, "lxml")
+                    # Check meta description
+                    meta_desc = ep_soup.select_one('meta[name="description"]')
+                    if meta_desc:
+                        ep_desc = meta_desc.get("content", "")[:500]
+                    # Check JSON-LD
+                    if not ep_desc:
+                        for script in ep_soup.select(
+                            'script[type="application/ld+json"]'
+                        ):
+                            try:
+                                ld = _json.loads(script.string or "")
+                            except (ValueError, TypeError):
+                                continue
+                            if isinstance(ld, dict) and ld.get("description"):
+                                ep_desc = ld["description"][:500]
+                                break
+                except (httpx.HTTPError, ValueError):
+                    pass
+
+            items.append(
+                NewsItem(
+                    title=f"{show_title}: {ep_title}",
+                    url=ep_url,
+                    source="Spotify",
+                    summary=ep_desc[:200] if ep_desc else "",
+                )
+            )
+
+    return items
 
 
 # ---------------------------------------------------------------------------
@@ -424,11 +571,11 @@ def get_spotify_links(
 
 
 def gather_daily_news(
-    techmeme_count: int = 15,
-    hn_count: int = 10,
+    techmeme_count: int = 5,
+    hn_count: int = 5,
     reddit_count: int = 10,
     sec_count: int = 10,
-    x_topics: list[dict[str, str]] | None = None,
+    x_accounts: list[str] | None = None,
     ft_sections: list[dict[str, str]] | None = None,
     spotify_podcasts: list[dict[str, str]] | None = None,
     reddit_subreddits: list[str] | None = None,
@@ -445,7 +592,7 @@ def gather_daily_news(
         sec_filings=fetch_sec_filings(
             form_types=sec_form_types, max_items=sec_count
         ),
-        x_links=get_x_links(custom_topics=x_topics),
-        ft_links=get_ft_links(custom_sections=ft_sections),
-        spotify_links=get_spotify_links(custom_podcasts=spotify_podcasts),
+        x_links=fetch_x_posts(accounts=x_accounts),
+        ft_links=fetch_ft_articles(sections=ft_sections),
+        spotify_links=fetch_spotify_episodes(shows=spotify_podcasts),
     )

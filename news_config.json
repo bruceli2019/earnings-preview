@@ -1,0 +1,19 @@
+{
+  "techmeme_count": 5,
+  "hn_count": 5,
+  "reddit_count": 10,
+  "sec_count": 10,
+  "output_dir": "./newsletters",
+  "obsidian_vault": "C:\\Users\\pengy\\Documents\\Obsidian Vault",
+  "x_accounts": ["OpenAI", "AnthropicAI", "GoogleDeepMind"],
+  "ft_sections": [
+    {"title": "Technology", "url": "https://www.ft.com/technology"},
+    {"title": "Artificial Intelligence", "url": "https://www.ft.com/artificial-intelligence"}
+  ],
+  "spotify_podcasts": [
+    {"title": "The All-In Podcast", "url": "https://open.spotify.com/show/2IqXAVFR4e0Bmyjsdc8QzF"},
+    {"title": "Acquired", "url": "https://open.spotify.com/show/7Fj0XEuUQLbqnTICXBSKAE"},
+    {"title": "Lex Fridman Podcast", "url": "https://open.spotify.com/show/2MAi0BvDc6GTFvKFPXnkCL"},
+    {"title": "Odd Lots (Bloomberg)", "url": "https://open.spotify.com/show/35IczmCnU09IEcz5P5jZ89"}
+  ]
+}

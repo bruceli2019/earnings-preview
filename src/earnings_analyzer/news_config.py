@@ -4,15 +4,13 @@ Drop a ``news_config.json`` file next to your working directory (or point
 to one with ``--config``) to override defaults.  The schema is:
 
 {
-  "techmeme_count": 15,
-  "hn_count": 10,
+  "techmeme_count": 5,
+  "hn_count": 5,
   "reddit_count": 10,
   "sec_count": 10,
   "output_dir": "./newsletters",
   "anthropic_api_key": null,
-  "x_topics": [
-    {"title": "My Topic", "url": "https://x.com/search?q=...", "summary": "..."}
-  ],
+  "x_accounts": ["OpenAI", "AnthropicAI", "GoogleDeepMind"],
   "ft_sections": [
     {"title": "Markets", "url": "https://www.ft.com/markets", "summary": "..."}
   ],
@@ -58,17 +56,18 @@ def _validate_link_list(items: list | None, label: str) -> None:
 class NewsConfig:
     """Resolved news summary configuration."""
 
-    techmeme_count: int = 15
-    hn_count: int = 10
+    techmeme_count: int = 5
+    hn_count: int = 5
     reddit_count: int = 10
     sec_count: int = 10
     output_dir: str = "./newsletters"
     anthropic_api_key: str | None = None
-    x_topics: list[dict[str, str]] | None = None
+    x_accounts: list[str] | None = None
     ft_sections: list[dict[str, str]] | None = None
     spotify_podcasts: list[dict[str, str]] | None = None
     reddit_subreddits: list[str] | None = None
     sec_form_types: list[str] | None = None
+    obsidian_vault: str | None = None
 
     @classmethod
     def load(cls, path: str | Path | None = None) -> NewsConfig:
@@ -87,11 +86,11 @@ class NewsConfig:
         data = json.loads(raw)
 
         # --- validate scalars ---
-        techmeme_count = data.get("techmeme_count", 15)
+        techmeme_count = data.get("techmeme_count", 5)
         if not isinstance(techmeme_count, int) or not 1 <= techmeme_count <= 100:
             raise ValueError(f"techmeme_count must be 1-100, got {techmeme_count}")
 
-        hn_count = data.get("hn_count", 10)
+        hn_count = data.get("hn_count", 5)
         if not isinstance(hn_count, int) or not 1 <= hn_count <= 100:
             raise ValueError(f"hn_count must be 1-100, got {hn_count}")
 
@@ -107,10 +106,24 @@ class NewsConfig:
         if not isinstance(output_dir, str) or ".." in output_dir:
             raise ValueError(f"Invalid output_dir: {output_dir}")
 
+        # --- validate x_accounts ---
+        x_accounts = data.get("x_accounts")
+        if x_accounts is not None:
+            if not isinstance(x_accounts, list):
+                raise ValueError("x_accounts must be a list")
+            for acct in x_accounts:
+                if not isinstance(acct, str) or not re.match(r"^[A-Za-z0-9_]{1,30}$", acct):
+                    raise ValueError(f"Invalid X account handle: {acct}")
+
         # --- validate link lists ---
-        _validate_link_list(data.get("x_topics"), "x_topics")
         _validate_link_list(data.get("ft_sections"), "ft_sections")
         _validate_link_list(data.get("spotify_podcasts"), "spotify_podcasts")
+
+        # --- validate obsidian_vault ---
+        obsidian_vault = data.get("obsidian_vault")
+        if obsidian_vault is not None:
+            if not isinstance(obsidian_vault, str):
+                raise ValueError("obsidian_vault must be a string path")
 
         # --- validate string lists ---
         reddit_subs = data.get("reddit_subreddits")
@@ -136,9 +149,10 @@ class NewsConfig:
             sec_count=sec_count,
             output_dir=output_dir,
             anthropic_api_key=data.get("anthropic_api_key"),
-            x_topics=data.get("x_topics"),
+            x_accounts=x_accounts,
             ft_sections=data.get("ft_sections"),
             spotify_podcasts=data.get("spotify_podcasts"),
             reddit_subreddits=reddit_subs,
             sec_form_types=sec_forms,
+            obsidian_vault=obsidian_vault,
         )

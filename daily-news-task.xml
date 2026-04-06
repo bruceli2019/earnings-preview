@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>Generate daily AI news summary and export to Obsidian vault. Runs at 12 PM, catches up on missed days at logon.</Description>
+    <Author>pengy</Author>
+  </RegistrationInfo>
+  <Triggers>
+    <!-- Daily at 12:00 PM -->
+    <CalendarTrigger>
+      <StartBoundary>2026-04-06T12:00:00</StartBoundary>
+      <Enabled>true</Enabled>
+      <ScheduleByDay>
+        <DaysInterval>1</DaysInterval>
+      </ScheduleByDay>
+    </CalendarTrigger>
+    <!-- At logon (catches missed runs when machine was off) -->
+    <LogonTrigger>
+      <Enabled>true</Enabled>
+      <Delay>PT2M</Delay>
+    </LogonTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>true</RunOnlyIfNetworkAvailable>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>false</Hidden>
+    <RunOnlyIfIdle>false</RunOnlyIfIdle>
+    <ExecutionTimeLimit>PT30M</ExecutionTimeLimit>
+    <Priority>7</Priority>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>powershell.exe</Command>
+      <Arguments>-NoProfile -ExecutionPolicy Bypass -File "C:\Users\pengy\Documents\Vibe Coding\earnings-preview\run-daily-news.ps1"</Arguments>
+      <WorkingDirectory>C:\Users\pengy\Documents\Vibe Coding\earnings-preview</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>
