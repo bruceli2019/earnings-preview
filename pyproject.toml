@@ -15,7 +15,7 @@ dependencies = [
 [project.optional-dependencies]
 ai = ["anthropic>=0.40"]
 browser = ["playwright>=1.40"]
-podcast = ["openai-whisper>=20240930", "feedparser>=6.0", "requests>=2.31"]
+podcast = ["openai-whisper>=20240930", "feedparser>=6.0", "requests>=2.31", "google-genai>=1.0"]
 
 [project.scripts]
 earnings-analyzer = "earnings_analyzer.cli:main"
