@@ -41,18 +41,11 @@ jobs:
       - name: Build index page
         run: |
           cd site
-          # Create an index.html that loads the latest newsletter inline (no redirect caching)
+          # Copy the latest newsletter as index.html (no redirect to cache)
           LATEST=$(ls -t news-summary-*.html 2>/dev/null | head -1)
           if [ -n "$LATEST" ]; then
-            # Use the newsletter itself as index.html — no redirect to cache
             cp "$LATEST" index.html
           fi
-          # Add cache-control headers via _headers file (GitHub Pages custom headers)
-          cat > _headers << 'HEADEREOF'
-          /*
-            Cache-Control: no-cache, no-store, must-revalidate
-            Pragma: no-cache
-          HEADEREOF
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
