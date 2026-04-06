@@ -1,8 +1,8 @@
 {
   "techmeme_count": 5,
   "hn_count": 5,
-  "reddit_count": 10,
-  "sec_count": 10,
+  "reddit_count": 5,
+  "sec_count": 5,
   "output_dir": "./newsletters",
   "obsidian_vault": "C:\\Users\\pengy\\Documents\\Obsidian Vault",
   "x_accounts": ["OpenAI", "AnthropicAI", "GoogleDeepMind"],

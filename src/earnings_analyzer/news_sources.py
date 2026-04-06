@@ -171,7 +171,7 @@ _REDDIT_SUBREDDITS = ["investing", "stocks", "finance"]
 
 
 def fetch_reddit_finance(
-    max_items: int = 10,
+    max_items: int = 5,
     subreddits: list[str] | None = None,
 ) -> list[NewsItem]:
     """Fetch top posts from finance-related subreddits."""
@@ -233,7 +233,7 @@ _SEC_FILINGS_RSS = "https://www.sec.gov/cgi-bin/browse-edgar"
 
 def fetch_sec_filings(
     form_types: list[str] | None = None,
-    max_items: int = 10,
+    max_items: int = 5,
 ) -> list[NewsItem]:
     """Fetch latest SEC filings (8-K, 10-Q by default) as news items."""
     max_items = min(max(1, max_items), 50)
@@ -602,7 +602,7 @@ _DEFAULT_FT_FEEDS: list[dict[str, str]] = [
 
 def fetch_ft_articles(
     sections: list[dict[str, str]] | None = None,
-    max_per_section: int = 5,
+    max_items: int = 5,
 ) -> list[NewsItem]:
     """Fetch actual FT article headlines via public RSS feeds."""
     ft_feeds = sections or _DEFAULT_FT_FEEDS
@@ -649,10 +649,12 @@ def fetch_ft_articles(
                 )
             )
             count += 1
-            if count >= max_per_section:
+            if count >= max_items:
                 break
+        if len(items) >= max_items:
+            break
 
-    return items
+    return items[:max_items]
 
 
 # ---------------------------------------------------------------------------
@@ -806,8 +808,8 @@ def fetch_spotify_episodes(
 def gather_daily_news(
     techmeme_count: int = 5,
     hn_count: int = 5,
-    reddit_count: int = 10,
-    sec_count: int = 10,
+    reddit_count: int = 5,
+    sec_count: int = 5,
     arxiv_count: int = 5,
     hf_count: int = 5,
     x_accounts: list[str] | None = None,

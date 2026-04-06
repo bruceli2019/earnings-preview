@@ -58,8 +58,8 @@ class NewsConfig:
 
     techmeme_count: int = 5
     hn_count: int = 5
-    reddit_count: int = 10
-    sec_count: int = 10
+    reddit_count: int = 5
+    sec_count: int = 5
     arxiv_count: int = 5
     hf_count: int = 5
     output_dir: str = "./newsletters"
@@ -97,11 +97,11 @@ class NewsConfig:
         if not isinstance(hn_count, int) or not 1 <= hn_count <= 100:
             raise ValueError(f"hn_count must be 1-100, got {hn_count}")
 
-        reddit_count = data.get("reddit_count", 10)
+        reddit_count = data.get("reddit_count", 5)
         if not isinstance(reddit_count, int) or not 1 <= reddit_count <= 100:
             raise ValueError(f"reddit_count must be 1-100, got {reddit_count}")
 
-        sec_count = data.get("sec_count", 10)
+        sec_count = data.get("sec_count", 5)
         if not isinstance(sec_count, int) or not 1 <= sec_count <= 50:
             raise ValueError(f"sec_count must be 1-50, got {sec_count}")
 

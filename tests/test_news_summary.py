@@ -206,8 +206,8 @@ def test_config_defaults():
     cfg = NewsConfig()
     assert cfg.techmeme_count == 5
     assert cfg.hn_count == 5
-    assert cfg.reddit_count == 10
-    assert cfg.sec_count == 10
+    assert cfg.reddit_count == 5
+    assert cfg.sec_count == 5
     assert cfg.arxiv_count == 5
     assert cfg.hf_count == 5
     assert cfg.output_dir == "./newsletters"
