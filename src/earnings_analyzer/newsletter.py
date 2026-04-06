@@ -93,6 +93,8 @@ def render_newsletter(news: DailyNewsSources) -> str:
         _render_news_section("X / Twitter", "&#x1D54F;", news.x_links),
         _render_news_section("Financial Times", "&#x1F4CA;", news.ft_links),
         _render_news_section("Spotify Podcasts", "&#x1F3A7;", news.spotify_links),
+        _render_news_section("ArXiv Papers", "&#x1F4D1;", news.arxiv_papers),
+        _render_news_section("HF Daily Papers", "&#x1F917;", news.hf_papers),
     ]
 
     body = "\n".join(s for s in sections if s)

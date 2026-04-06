@@ -208,6 +208,8 @@ def test_config_defaults():
     assert cfg.hn_count == 5
     assert cfg.reddit_count == 10
     assert cfg.sec_count == 10
+    assert cfg.arxiv_count == 5
+    assert cfg.hf_count == 5
     assert cfg.output_dir == "./newsletters"
     assert cfg.x_accounts is None
     assert cfg.anthropic_api_key is None

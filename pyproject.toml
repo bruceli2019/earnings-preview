@@ -14,6 +14,7 @@ dependencies = [
 
 [project.optional-dependencies]
 ai = ["anthropic>=0.40"]
+browser = ["playwright>=1.40"]
 
 [project.scripts]
 earnings-analyzer = "earnings_analyzer.cli:main"

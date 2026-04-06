@@ -107,6 +107,8 @@ _SECTION_MAP: list[tuple[str, str, str]] = [
     ("X / Twitter", "𝕏", "x_links"),
     ("Financial Times", "📊", "ft_links"),
     ("Podcast Episodes", "🎧", "spotify_links"),
+    ("ArXiv Papers", "📑", "arxiv_papers"),
+    ("HF Daily Papers", "🤗", "hf_papers"),
     ("Reddit Finance", "💬", "reddit_finance"),
     ("SEC Filings", "📜", "sec_filings"),
 ]

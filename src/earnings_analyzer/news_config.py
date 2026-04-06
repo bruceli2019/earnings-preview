@@ -60,6 +60,8 @@ class NewsConfig:
     hn_count: int = 5
     reddit_count: int = 10
     sec_count: int = 10
+    arxiv_count: int = 5
+    hf_count: int = 5
     output_dir: str = "./newsletters"
     anthropic_api_key: str | None = None
     x_accounts: list[str] | None = None
@@ -102,6 +104,14 @@ class NewsConfig:
         sec_count = data.get("sec_count", 10)
         if not isinstance(sec_count, int) or not 1 <= sec_count <= 50:
             raise ValueError(f"sec_count must be 1-50, got {sec_count}")
+
+        arxiv_count = data.get("arxiv_count", 5)
+        if not isinstance(arxiv_count, int) or not 1 <= arxiv_count <= 50:
+            raise ValueError(f"arxiv_count must be 1-50, got {arxiv_count}")
+
+        hf_count = data.get("hf_count", 5)
+        if not isinstance(hf_count, int) or not 1 <= hf_count <= 50:
+            raise ValueError(f"hf_count must be 1-50, got {hf_count}")
 
         output_dir = data.get("output_dir", "./newsletters")
         if not isinstance(output_dir, str) or ".." in output_dir:
@@ -148,6 +158,8 @@ class NewsConfig:
             hn_count=hn_count,
             reddit_count=reddit_count,
             sec_count=sec_count,
+            arxiv_count=arxiv_count,
+            hf_count=hf_count,
             output_dir=output_dir,
             anthropic_api_key=data.get("anthropic_api_key"),
             x_accounts=x_accounts,

@@ -34,6 +34,8 @@ class DailyNewsSources:
     hacker_news: list[NewsItem] = field(default_factory=list)
     reddit_finance: list[NewsItem] = field(default_factory=list)
     sec_filings: list[NewsItem] = field(default_factory=list)
+    arxiv_papers: list[NewsItem] = field(default_factory=list)
+    hf_papers: list[NewsItem] = field(default_factory=list)
     analysis: str = ""
 
 
@@ -288,7 +290,7 @@ def fetch_sec_filings(
 
 
 # ---------------------------------------------------------------------------
-# X / Twitter — fetch actual posts via API v2 or syndication fallback
+# X / Twitter — fetch actual posts (API v2 > Playwright > syndication)
 # ---------------------------------------------------------------------------
 
 _DEFAULT_X_ACCOUNTS = [
@@ -341,11 +343,96 @@ def _fetch_x_via_api(
     return items
 
 
+def _fetch_x_via_browser(
+    accounts: list[str],
+    max_per_account: int,
+) -> list[NewsItem]:
+    """Fetch tweets using a headless browser (Playwright).
+
+    Renders the X SPA fully, bypassing JS-rendering requirements.
+    Requires ``pip install playwright && playwright install chromium``.
+    """
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return []
+
+    items: list[NewsItem] = []
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page(
+                user_agent=(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/126.0.0.0 Safari/537.36"
+                ),
+            )
+
+            for handle in accounts:
+                if not re.match(r"^[A-Za-z0-9_]{1,30}$", handle):
+                    continue
+                try:
+                    page.goto(
+                        f"https://x.com/{handle}",
+                        wait_until="networkidle",
+                        timeout=20_000,
+                    )
+                    # Wait for tweet articles to render
+                    page.wait_for_selector(
+                        'article[data-testid="tweet"]',
+                        timeout=10_000,
+                    )
+                except Exception:
+                    continue
+
+                tweets = page.query_selector_all(
+                    'article[data-testid="tweet"]'
+                )
+                count = 0
+                for tweet_el in tweets:
+                    if count >= max_per_account:
+                        break
+                    # Extract tweet text
+                    text_el = tweet_el.query_selector(
+                        '[data-testid="tweetText"]'
+                    )
+                    if not text_el:
+                        continue
+                    text = text_el.inner_text()[:300].strip()
+                    if not text:
+                        continue
+
+                    # Extract tweet URL from the timestamp link
+                    time_link = tweet_el.query_selector('a[href*="/status/"]')
+                    if time_link:
+                        href = time_link.get_attribute("href") or ""
+                        url = f"https://x.com{href}" if href.startswith("/") else href
+                    else:
+                        url = f"https://x.com/{handle}"
+
+                    items.append(
+                        NewsItem(
+                            title=text,
+                            url=url,
+                            source=f"@{handle}",
+                            summary="",
+                        )
+                    )
+                    count += 1
+
+            browser.close()
+    except Exception:
+        pass
+
+    return items
+
+
 def _fetch_x_via_syndication(
     accounts: list[str],
     max_per_account: int,
 ) -> list[NewsItem]:
-    """Fallback: fetch tweets via X syndication embed endpoint."""
+    """Last-resort fallback via X syndication embed endpoint."""
     items: list[NewsItem] = []
     for handle in accounts:
         if not re.match(r"^[A-Za-z0-9_]{1,30}$", handle):
@@ -398,13 +485,103 @@ def fetch_x_posts(
 ) -> list[NewsItem]:
     """Fetch recent posts from X accounts.
 
-    Uses X API v2 if *bearer_token* is provided (most reliable).
-    Falls back to syndication embed scraping otherwise.
+    Tries in order: API v2 (bearer token) > Playwright (headless browser)
+    > syndication embed (rate-limited fallback).
     """
     accts = accounts or _DEFAULT_X_ACCOUNTS
     if bearer_token:
         return _fetch_x_via_api(accts, bearer_token, max_per_account)
+    # Try headless browser (Playwright) if installed
+    items = _fetch_x_via_browser(accts, max_per_account)
+    if items:
+        return items
+    # Last resort: syndication
     return _fetch_x_via_syndication(accts, max_per_account)
+
+
+# ---------------------------------------------------------------------------
+# ArXiv — latest AI/ML research papers (free API, no auth)
+# ---------------------------------------------------------------------------
+
+_ARXIV_API = "http://export.arxiv.org/api/query"
+_ARXIV_CATEGORIES = "cat:cs.AI+OR+cat:cs.LG+OR+cat:cs.CL"
+
+
+def fetch_arxiv_papers(max_items: int = 5) -> list[NewsItem]:
+    """Fetch the latest AI/ML papers from ArXiv."""
+    max_items = min(max(1, max_items), 50)
+    try:
+        # Build URL manually — httpx params encoding breaks ArXiv's `+` OR syntax
+        url = (
+            f"{_ARXIV_API}?search_query={_ARXIV_CATEGORIES}"
+            f"&sortBy=submittedDate&sortOrder=descending"
+            f"&max_results={max_items}"
+        )
+        resp = _safe_get(url, timeout=15)
+    except (httpx.HTTPError, ValueError):
+        return []
+
+    try:
+        root = ET.fromstring(resp.content[:_MAX_RESPONSE_BYTES])
+    except ET.ParseError:
+        return []
+
+    ns = {"a": "http://www.w3.org/2005/Atom"}
+    items: list[NewsItem] = []
+    for entry in root.findall("a:entry", ns)[:max_items]:
+        title = (entry.findtext("a:title", "", ns) or "").strip()
+        title = re.sub(r"\s+", " ", title)[:300]
+        link = entry.findtext("a:id", "", ns) or ""
+        summary = (entry.findtext("a:summary", "", ns) or "").strip()
+        summary = re.sub(r"\s+", " ", summary)[:200]
+        if not title or not link:
+            continue
+        items.append(
+            NewsItem(title=title, url=link, source="ArXiv", summary=summary)
+        )
+
+    return items
+
+
+# ---------------------------------------------------------------------------
+# Hugging Face Daily Papers — trending ML research (free API, no auth)
+# ---------------------------------------------------------------------------
+
+_HF_PAPERS_API = "https://huggingface.co/api/daily_papers"
+
+
+def fetch_hf_papers(max_items: int = 5) -> list[NewsItem]:
+    """Fetch trending papers from Hugging Face Daily Papers."""
+    max_items = min(max(1, max_items), 50)
+    try:
+        resp = _safe_get(_HF_PAPERS_API, timeout=15)
+        papers = resp.json()
+    except (httpx.HTTPError, ValueError):
+        return []
+
+    if not isinstance(papers, list):
+        return []
+
+    items: list[NewsItem] = []
+    for entry in papers[:max_items]:
+        paper = entry.get("paper", {})
+        title = (paper.get("title") or "")[:300]
+        paper_id = paper.get("id", "")
+        summary = (paper.get("summary") or "")[:200]
+        upvotes = paper.get("upvotes", 0)
+        if not title or not paper_id:
+            continue
+        url = f"https://huggingface.co/papers/{paper_id}"
+        items.append(
+            NewsItem(
+                title=title,
+                url=url,
+                source="HF Papers",
+                summary=f"Upvotes: {upvotes} | {summary}" if summary else "",
+            )
+        )
+
+    return items
 
 
 # ---------------------------------------------------------------------------
@@ -631,6 +808,8 @@ def gather_daily_news(
     hn_count: int = 5,
     reddit_count: int = 10,
     sec_count: int = 10,
+    arxiv_count: int = 5,
+    hf_count: int = 5,
     x_accounts: list[str] | None = None,
     x_bearer_token: str | None = None,
     ft_sections: list[dict[str, str]] | None = None,
@@ -652,4 +831,6 @@ def gather_daily_news(
         x_links=fetch_x_posts(accounts=x_accounts, bearer_token=x_bearer_token),
         ft_links=fetch_ft_articles(sections=ft_sections),
         spotify_links=fetch_spotify_episodes(shows=spotify_podcasts),
+        arxiv_papers=fetch_arxiv_papers(max_items=arxiv_count),
+        hf_papers=fetch_hf_papers(max_items=hf_count),
     )

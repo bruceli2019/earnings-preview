@@ -135,6 +135,8 @@ def daily_news(
             hn_count=cfg.hn_count,
             reddit_count=cfg.reddit_count,
             sec_count=cfg.sec_count,
+            arxiv_count=cfg.arxiv_count,
+            hf_count=cfg.hf_count,
             x_accounts=cfg.x_accounts,
             x_bearer_token=cfg.x_bearer_token,
             ft_sections=cfg.ft_sections,
@@ -151,6 +153,8 @@ def daily_news(
             + len(news.hacker_news)
             + len(news.reddit_finance)
             + len(news.sec_filings)
+            + len(news.arxiv_papers)
+            + len(news.hf_papers)
         )
         console.print(f"  [dim]Collected {total} items from live sources[/dim]")
 
@@ -171,6 +175,8 @@ def daily_news(
             f"\n[green]Newsletter saved:[/green] {filepath}\n"
             f"  [dim]{len(news.techmeme_headlines)} Techmeme, "
             f"{len(news.hacker_news)} HN, "
+            f"{len(news.arxiv_papers)} ArXiv, "
+            f"{len(news.hf_papers)} HF, "
             f"{len(news.reddit_finance)} Reddit, "
             f"{len(news.sec_filings)} SEC, "
             f"{len(news.x_links)} X, "
