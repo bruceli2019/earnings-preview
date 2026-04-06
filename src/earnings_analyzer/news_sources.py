@@ -375,13 +375,13 @@ def _fetch_x_via_browser(
                 try:
                     page.goto(
                         f"https://x.com/{handle}",
-                        wait_until="networkidle",
-                        timeout=20_000,
+                        wait_until="domcontentloaded",
+                        timeout=30_000,
                     )
-                    # Wait for tweet articles to render
+                    # Wait for tweet articles to render (X is an SPA)
                     page.wait_for_selector(
                         'article[data-testid="tweet"]',
-                        timeout=10_000,
+                        timeout=15_000,
                     )
                 except Exception:
                     continue
