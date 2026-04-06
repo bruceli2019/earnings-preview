@@ -51,9 +51,7 @@ def transcribe(
 
     Returns the transcript text.  Caches results by episode slug.
     """
-    check_ffmpeg()
-
-    # Check cache
+    # Check cache first (no ffmpeg needed for cache hits)
     _CACHE_DIR.mkdir(parents=True, exist_ok=True)
     cache_file = _CACHE_DIR / f"{episode_slug}.txt"
     if cache_file.exists():
@@ -61,6 +59,8 @@ def transcribe(
         if text:
             print(f"  Transcript cache hit: {cache_file}")
             return text
+
+    check_ffmpeg()
 
     try:
         import whisper
