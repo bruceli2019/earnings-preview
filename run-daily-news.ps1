@@ -3,8 +3,8 @@
 $ErrorActionPreference = "Continue"
 
 $projectDir = "C:\Users\pengy\Documents\Vibe Coding\earnings-preview"
-$vaultDir   = "C:\Users\pengy\Documents\Obsidian Vault"
-$notesDir   = Join-Path $vaultDir "Daily Notes"
+$vaultDir   = "C:\Users\pengy\Documents\Vibe Coding\obsidian-wiki\raw\research"
+$notesDir   = $vaultDir
 $pythonExe  = Join-Path $projectDir ".venv\Scripts\python.exe"
 $maxBackfill = 7  # look back up to 7 days
 

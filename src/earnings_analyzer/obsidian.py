@@ -189,7 +189,7 @@ def export_to_obsidian(
     Returns the path to the written file.
     """
     vault = Path(vault_path).resolve()
-    daily_dir = vault / "Daily Notes"
+    daily_dir = vault
     daily_dir.mkdir(parents=True, exist_ok=True)
 
     filename = f"{news.date.isoformat()}.md"
