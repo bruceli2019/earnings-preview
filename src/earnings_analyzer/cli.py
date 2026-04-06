@@ -136,6 +136,7 @@ def daily_news(
             reddit_count=cfg.reddit_count,
             sec_count=cfg.sec_count,
             x_accounts=cfg.x_accounts,
+            x_bearer_token=cfg.x_bearer_token,
             ft_sections=cfg.ft_sections,
             spotify_podcasts=cfg.spotify_podcasts,
             reddit_subreddits=cfg.reddit_subreddits,

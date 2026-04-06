@@ -288,40 +288,79 @@ def fetch_sec_filings(
 
 
 # ---------------------------------------------------------------------------
-# X / Twitter — fetch actual posts from AI-focused accounts
+# X / Twitter — fetch actual posts via API v2 or syndication fallback
 # ---------------------------------------------------------------------------
 
 _DEFAULT_X_ACCOUNTS = [
     "OpenAI",
     "AnthropicAI",
     "GoogleDeepMind",
-    "xaboratory",  # AI research
-    "kaboratory",  # ML papers
 ]
 
+_X_API_SEARCH = "https://api.twitter.com/2/tweets/search/recent"
 _SYNDICATION_URL = "https://syndication.twitter.com/srv/timeline-profile/screen-name"
 
 
-def fetch_x_posts(
-    accounts: list[str] | None = None,
-    max_per_account: int = 3,
+def _fetch_x_via_api(
+    accounts: list[str],
+    bearer_token: str,
+    max_per_account: int,
 ) -> list[NewsItem]:
-    """Fetch recent posts from specific X accounts via syndication embeds.
-
-    Falls back gracefully if X blocks the request.
-    """
-    accts = accounts or _DEFAULT_X_ACCOUNTS
+    """Fetch tweets via X API v2 (requires bearer token)."""
     items: list[NewsItem] = []
+    for handle in accounts:
+        if not re.match(r"^[A-Za-z0-9_]{1,30}$", handle):
+            continue
+        try:
+            resp = _safe_get(
+                _X_API_SEARCH,
+                headers={"Authorization": f"Bearer {bearer_token}"},
+                params={
+                    "query": f"from:{handle} -is:retweet",
+                    "max_results": str(min(max_per_account, 10)),
+                    "tweet.fields": "text,created_at,author_id",
+                },
+            )
+            data = resp.json()
+        except (httpx.HTTPError, ValueError):
+            continue
 
-    for handle in accts:
+        for tweet in data.get("data", [])[:max_per_account]:
+            tweet_id = tweet.get("id", "")
+            text = tweet.get("text", "")[:300]
+            if not text:
+                continue
+            items.append(
+                NewsItem(
+                    title=text,
+                    url=f"https://x.com/{handle}/status/{tweet_id}",
+                    source=f"@{handle}",
+                    summary="",
+                )
+            )
+    return items
+
+
+def _fetch_x_via_syndication(
+    accounts: list[str],
+    max_per_account: int,
+) -> list[NewsItem]:
+    """Fallback: fetch tweets via X syndication embed endpoint."""
+    items: list[NewsItem] = []
+    for handle in accounts:
         if not re.match(r"^[A-Za-z0-9_]{1,30}$", handle):
             continue
         try:
             resp = _safe_get(
                 f"{_SYNDICATION_URL}/{handle}",
                 headers={
-                    "User-Agent": _USER_AGENT,
+                    "User-Agent": (
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/126.0.0.0 Safari/537.36"
+                    ),
                     "Referer": "https://platform.twitter.com/",
+                    "Accept": "text/html,application/xhtml+xml",
                 },
             )
         except (httpx.HTTPError, ValueError):
@@ -337,12 +376,10 @@ def fetch_x_posts(
             if not text:
                 continue
             tweet_id = tweet_div.get("data-tweet-id", "")
-            url = f"https://x.com/{handle}/status/{tweet_id}"
-
             items.append(
                 NewsItem(
                     title=text,
-                    url=url,
+                    url=f"https://x.com/{handle}/status/{tweet_id}",
                     source=f"@{handle}",
                     summary="",
                 )
@@ -354,13 +391,35 @@ def fetch_x_posts(
     return items
 
 
+def fetch_x_posts(
+    accounts: list[str] | None = None,
+    bearer_token: str | None = None,
+    max_per_account: int = 3,
+) -> list[NewsItem]:
+    """Fetch recent posts from X accounts.
+
+    Uses X API v2 if *bearer_token* is provided (most reliable).
+    Falls back to syndication embed scraping otherwise.
+    """
+    accts = accounts or _DEFAULT_X_ACCOUNTS
+    if bearer_token:
+        return _fetch_x_via_api(accts, bearer_token, max_per_account)
+    return _fetch_x_via_syndication(accts, max_per_account)
+
+
 # ---------------------------------------------------------------------------
-# Financial Times — scrape actual article headlines
+# Financial Times — fetch real articles via RSS feeds
 # ---------------------------------------------------------------------------
 
-_DEFAULT_FT_SECTIONS: list[dict[str, str]] = [
-    {"title": "Technology", "url": "https://www.ft.com/technology"},
-    {"title": "Artificial Intelligence", "url": "https://www.ft.com/artificial-intelligence"},
+_DEFAULT_FT_FEEDS: list[dict[str, str]] = [
+    {
+        "title": "Technology",
+        "url": "https://www.ft.com/technology?format=rss",
+    },
+    {
+        "title": "Artificial Intelligence",
+        "url": "https://www.ft.com/artificial-intelligence?format=rss",
+    },
 ]
 
 
@@ -368,51 +427,48 @@ def fetch_ft_articles(
     sections: list[dict[str, str]] | None = None,
     max_per_section: int = 5,
 ) -> list[NewsItem]:
-    """Scrape actual article headlines from FT section pages."""
-    ft_sections = sections or _DEFAULT_FT_SECTIONS
+    """Fetch actual FT article headlines via public RSS feeds."""
+    ft_feeds = sections or _DEFAULT_FT_FEEDS
     items: list[NewsItem] = []
     seen: set[str] = set()
 
-    for section in ft_sections:
-        url = _sanitize_url(section.get("url", ""))
-        if not url:
+    for feed_info in ft_feeds:
+        feed_url = feed_info.get("url", "")
+        # Ensure RSS format param is present
+        if "format=rss" not in feed_url:
+            feed_url = feed_url.rstrip("/") + "?format=rss"
+        safe_url = _sanitize_url(feed_url)
+        if not safe_url:
             continue
+
         try:
-            resp = _safe_get(url)
+            resp = _safe_get(safe_url)
         except (httpx.HTTPError, ValueError):
             continue
 
-        soup = BeautifulSoup(resp.text, "lxml")
+        try:
+            root = ET.fromstring(resp.content[:_MAX_RESPONSE_BYTES])
+        except ET.ParseError:
+            continue
+
         count = 0
-        # FT uses <a> tags with data-trackable="heading-link" for article links
-        for link in soup.select('a[data-trackable="heading-link"], .o-teaser__heading a'):
-            title = link.get_text(strip=True)[:300]
-            href = link.get("href", "")
-            if not title or title in seen:
+        for item_el in root.findall(".//item"):
+            title = (item_el.findtext("title") or "").strip()[:300]
+            link = (item_el.findtext("link") or "").strip()
+            desc = (item_el.findtext("description") or "").strip()[:200]
+            if not title or not link or title in seen:
                 continue
-            if href.startswith("/"):
-                href = f"https://www.ft.com{href}"
-            article_url = _sanitize_url(href)
+            article_url = _sanitize_url(link)
             if not article_url:
                 continue
             seen.add(title)
-
-            # Try to get standfirst/summary
-            parent = link.find_parent(class_=re.compile(r"teaser|story"))
-            summary = ""
-            if parent:
-                standfirst = parent.select_one(
-                    '.o-teaser__standfirst, [data-trackable="standfirst"]'
-                )
-                if standfirst:
-                    summary = standfirst.get_text(strip=True)[:200]
 
             items.append(
                 NewsItem(
                     title=title,
                     url=article_url,
-                    source=f"FT {section['title']}",
-                    summary=summary,
+                    source=f"FT {feed_info.get('title', '')}",
+                    summary=desc,
                 )
             )
             count += 1
@@ -576,6 +632,7 @@ def gather_daily_news(
     reddit_count: int = 10,
     sec_count: int = 10,
     x_accounts: list[str] | None = None,
+    x_bearer_token: str | None = None,
     ft_sections: list[dict[str, str]] | None = None,
     spotify_podcasts: list[dict[str, str]] | None = None,
     reddit_subreddits: list[str] | None = None,
@@ -592,7 +649,7 @@ def gather_daily_news(
         sec_filings=fetch_sec_filings(
             form_types=sec_form_types, max_items=sec_count
         ),
-        x_links=fetch_x_posts(accounts=x_accounts),
+        x_links=fetch_x_posts(accounts=x_accounts, bearer_token=x_bearer_token),
         ft_links=fetch_ft_articles(sections=ft_sections),
         spotify_links=fetch_spotify_episodes(shows=spotify_podcasts),
     )

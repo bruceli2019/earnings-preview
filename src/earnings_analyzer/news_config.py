@@ -63,6 +63,7 @@ class NewsConfig:
     output_dir: str = "./newsletters"
     anthropic_api_key: str | None = None
     x_accounts: list[str] | None = None
+    x_bearer_token: str | None = None
     ft_sections: list[dict[str, str]] | None = None
     spotify_podcasts: list[dict[str, str]] | None = None
     reddit_subreddits: list[str] | None = None
@@ -150,6 +151,7 @@ class NewsConfig:
             output_dir=output_dir,
             anthropic_api_key=data.get("anthropic_api_key"),
             x_accounts=x_accounts,
+            x_bearer_token=data.get("x_bearer_token"),
             ft_sections=data.get("ft_sections"),
             spotify_podcasts=data.get("spotify_podcasts"),
             reddit_subreddits=reddit_subs,
