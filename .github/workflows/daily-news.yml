@@ -46,6 +46,11 @@ jobs:
           if [ -n "$LATEST" ]; then
             cp "$LATEST" index.html
           fi
+          # Copy the latest markdown for easy Obsidian access
+          LATEST_MD=$(ls -t news-summary-*.md 2>/dev/null | head -1)
+          if [ -n "$LATEST_MD" ]; then
+            cp "$LATEST_MD" latest.md
+          fi
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

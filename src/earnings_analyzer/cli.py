@@ -104,7 +104,7 @@ def daily_news(
     from earnings_analyzer.news_config import NewsConfig
     from earnings_analyzer.news_sources import gather_daily_news
     from earnings_analyzer.newsletter import save_newsletter
-    from earnings_analyzer.obsidian import export_to_obsidian
+    from earnings_analyzer.obsidian import export_to_obsidian, save_markdown
 
     try:
         cfg = NewsConfig.load(config_path)
@@ -170,9 +170,11 @@ def daily_news(
                 console.print("  [dim]Analysis complete[/dim]")
 
         filepath = save_newsletter(news, output_dir=cfg.output_dir)
+        md_path = save_markdown(news, output_dir=cfg.output_dir)
 
         console.print(
             f"\n[green]Newsletter saved:[/green] {filepath}\n"
+            f"  [green]Markdown saved:[/green]  {md_path}\n"
             f"  [dim]{len(news.techmeme_headlines)} Techmeme, "
             f"{len(news.hacker_news)} HN, "
             f"{len(news.arxiv_papers)} ArXiv, "

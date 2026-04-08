@@ -210,3 +210,29 @@ def export_to_obsidian(
         encoding="utf-8",
     )
     return filepath
+
+
+def save_markdown(
+    news: DailyNewsSources,
+    output_dir: str | Path = ".",
+    filename: str | None = None,
+) -> Path:
+    """Save a clean Obsidian-ready markdown file alongside the HTML newsletter.
+
+    Returns the path to the written file.
+    """
+    output_path = Path(output_dir).resolve()
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    if filename is None:
+        filename = f"news-summary-{news.date.isoformat()}.md"
+
+    if ".." in filename or "/" in filename or "\\" in filename:
+        raise ValueError(f"Invalid filename: {filename}")
+
+    filepath = (output_path / filename).resolve()
+    if not str(filepath).startswith(str(output_path)):
+        raise ValueError("Filename escapes output directory")
+
+    filepath.write_text(render_obsidian_note(news), encoding="utf-8")
+    return filepath
