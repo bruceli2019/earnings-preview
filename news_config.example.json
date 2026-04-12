@@ -4,7 +4,7 @@
   "reddit_count": 5,
   "sec_count": 5,
   "output_dir": "./newsletters",
-  "obsidian_vault": "C:\\Users\\pengy\\Documents\\Vibe Coding\\obsidian-wiki\\raw\\research",
+  "obsidian_vault": "C:\\Users\\YOUR_USERNAME\\path\\to\\obsidian\\vault",
   "x_accounts": ["OpenAI", "AnthropicAI", "GoogleDeepMind"],
   "ft_sections": [
     {"title": "Technology", "url": "https://www.ft.com/technology"},
