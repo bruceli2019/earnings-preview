@@ -26,7 +26,10 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install -e ".[ai]"
+        run: |
+          pip install -e ".[ai]"
+          pip install playwright
+          playwright install chromium
 
       - name: Generate newsletter
         env:
