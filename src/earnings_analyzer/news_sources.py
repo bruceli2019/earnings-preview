@@ -294,9 +294,23 @@ def fetch_sec_filings(
 # ---------------------------------------------------------------------------
 
 _DEFAULT_X_ACCOUNTS = [
+    # AI labs
     "OpenAI",
     "AnthropicAI",
     "GoogleDeepMind",
+    # Researchers & builders
+    "karpathy",        # Andrej Karpathy
+    "ylecun",          # Yann LeCun (Meta Chief AI Scientist)
+    "DrJimFan",        # Jim Fan (NVIDIA)
+    "fchollet",        # François Chollet (Keras)
+    "polynoamial",     # Noam Brown (Meta FAIR, reasoning research)
+    # Synthesizers & commentators
+    "emollick",        # Ethan Mollick (Wharton, practical AI)
+    "swyx",            # Swyx (Latent Space, AI engineering)
+    "GaryMarcus",      # Gary Marcus (AI skeptic)
+    # Media & podcasters
+    "lexfridman",      # Lex Fridman
+    "saranormous",     # Sarah Guo (No Priors, Conviction VC)
 ]
 
 _X_API_SEARCH = "https://api.twitter.com/2/tweets/search/recent"
@@ -481,22 +495,24 @@ def _fetch_x_via_syndication(
 def fetch_x_posts(
     accounts: list[str] | None = None,
     bearer_token: str | None = None,
-    max_per_account: int = 3,
+    max_per_account: int = 1,
+    max_total: int = 5,
 ) -> list[NewsItem]:
     """Fetch recent posts from X accounts.
 
     Tries in order: API v2 (bearer token) > Playwright (headless browser)
     > syndication embed (rate-limited fallback).
+    With many accounts, returns at most *max_total* posts for diversity.
     """
     accts = accounts or _DEFAULT_X_ACCOUNTS
     if bearer_token:
-        return _fetch_x_via_api(accts, bearer_token, max_per_account)
+        return _fetch_x_via_api(accts, bearer_token, max_per_account)[:max_total]
     # Try headless browser (Playwright) if installed
     items = _fetch_x_via_browser(accts, max_per_account)
     if items:
-        return items
+        return items[:max_total]
     # Last resort: syndication
-    return _fetch_x_via_syndication(accts, max_per_account)
+    return _fetch_x_via_syndication(accts, max_per_account)[:max_total]
 
 
 # ---------------------------------------------------------------------------

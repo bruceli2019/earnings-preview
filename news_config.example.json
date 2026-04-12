@@ -5,7 +5,12 @@
   "sec_count": 5,
   "output_dir": "./newsletters",
   "obsidian_vault": "C:\\Users\\YOUR_USERNAME\\path\\to\\obsidian\\vault",
-  "x_accounts": ["OpenAI", "AnthropicAI", "GoogleDeepMind"],
+  "x_accounts": [
+    "OpenAI", "AnthropicAI", "GoogleDeepMind",
+    "karpathy", "ylecun", "DrJimFan", "fchollet", "polynoamial",
+    "emollick", "swyx", "GaryMarcus",
+    "lexfridman", "saranormous"
+  ],
   "ft_sections": [
     {"title": "Technology", "url": "https://www.ft.com/technology"},
     {"title": "Artificial Intelligence", "url": "https://www.ft.com/artificial-intelligence"}
