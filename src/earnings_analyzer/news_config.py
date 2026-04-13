@@ -9,7 +9,6 @@ to one with ``--config``) to override defaults.  The schema is:
   "reddit_count": 10,
   "sec_count": 10,
   "output_dir": "./newsletters",
-  "anthropic_api_key": null,
   "x_accounts": ["OpenAI", "AnthropicAI", "GoogleDeepMind"],
   "ft_sections": [
     {"title": "Markets", "url": "https://www.ft.com/markets", "summary": "..."}
@@ -63,7 +62,6 @@ class NewsConfig:
     arxiv_count: int = 5
     hf_count: int = 5
     output_dir: str = "./newsletters"
-    anthropic_api_key: str | None = None
     x_accounts: list[str] | None = None
     x_bearer_token: str | None = None
     ft_sections: list[dict[str, str]] | None = None
@@ -161,7 +159,6 @@ class NewsConfig:
             arxiv_count=arxiv_count,
             hf_count=hf_count,
             output_dir=output_dir,
-            anthropic_api_key=data.get("anthropic_api_key"),
             x_accounts=x_accounts,
             x_bearer_token=data.get("x_bearer_token"),
             ft_sections=data.get("ft_sections"),

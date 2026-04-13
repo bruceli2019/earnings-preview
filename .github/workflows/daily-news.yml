@@ -33,11 +33,11 @@ jobs:
 
       - name: Generate newsletter
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           earnings-analyzer news --output-dir ./site --no-analyze
           # Re-run with analysis if API key is available
-          if [ -n "$ANTHROPIC_API_KEY" ]; then
+          if [ -n "$GEMINI_API_KEY" ]; then
             earnings-analyzer news --output-dir ./site --analyze
           fi
 

@@ -212,7 +212,6 @@ def test_config_defaults():
     assert cfg.hf_count == 5
     assert cfg.output_dir == "./newsletters"
     assert cfg.x_accounts is None
-    assert cfg.anthropic_api_key is None
     assert cfg.obsidian_vault is None
 
 
@@ -275,7 +274,7 @@ def test_fallback_summary():
     assert "Techmeme" in summary
     assert "Hacker News" in summary
     assert "AI Startup Raises $1B" in summary
-    assert "ANTHROPIC_API_KEY" in summary
+    assert "GEMINI_API_KEY" in summary
 
 
 def test_build_headlines_prompt():
@@ -292,4 +291,4 @@ def test_fallback_summary_empty_sources():
     news = DailyNewsSources(date=date(2026, 1, 1))
     summary = _fallback_summary(news)
     assert "Daily Brief" in summary
-    assert "ANTHROPIC_API_KEY" in summary
+    assert "GEMINI_API_KEY" in summary

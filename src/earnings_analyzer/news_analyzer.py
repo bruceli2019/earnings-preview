@@ -1,4 +1,4 @@
-"""AI-powered analysis layer using Claude API.
+"""AI-powered analysis layer using Gemini (free tier).
 
 Processes raw headlines into an opinionated daily brief that identifies:
 - Signal vs. noise — what actually matters today
@@ -10,6 +10,7 @@ Processes raw headlines into an opinionated daily brief that identifies:
 from __future__ import annotations
 
 import os
+import time
 
 from earnings_analyzer.news_sources import DailyNewsSources, NewsItem
 
@@ -35,7 +36,7 @@ Rules:
 
 
 def _build_headlines_prompt(news: DailyNewsSources) -> str:
-    """Assemble all headlines into a structured prompt for Claude."""
+    """Assemble all headlines into a structured prompt."""
     sections: list[str] = []
 
     def _fmt(label: str, items: list[NewsItem]) -> None:
@@ -65,41 +66,58 @@ def _build_headlines_prompt(news: DailyNewsSources) -> str:
     )
 
 
+def _call_gemini(system: str, user_message: str, max_retries: int = 3) -> str:
+    """Send a message to Gemini with retry on rate limits."""
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY not set")
+
+    from google import genai
+
+    client = genai.Client(api_key=api_key)
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            resp = client.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=user_message,
+                config={
+                    "system_instruction": system,
+                    "max_output_tokens": 2048,
+                },
+            )
+            return resp.text
+        except Exception as e:
+            if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                wait = 30 * attempt
+                time.sleep(wait)
+            else:
+                raise
+    raise RuntimeError("Gemini rate limit exceeded after retries.")
+
+
 def analyze_news(
     news: DailyNewsSources,
     api_key: str | None = None,
 ) -> str:
-    """Send headlines to Claude and return an opinionated analysis.
+    """Send headlines to Gemini and return an opinionated analysis.
 
     Falls back to a simple summary if no API key is available or the
-    request fails.
+    request fails.  The *api_key* parameter is accepted for backwards
+    compatibility but ignored — uses GEMINI_API_KEY env var.
     """
-    key = api_key or os.environ.get("ANTHROPIC_API_KEY")
+    key = os.environ.get("GEMINI_API_KEY")
     if not key:
         return _fallback_summary(news)
 
     try:
-        import anthropic
-    except ImportError:
-        return _fallback_summary(news)
-
-    try:
-        client = anthropic.Anthropic(api_key=key)
-        message = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=1500,
-            system=_SYSTEM_PROMPT,
-            messages=[
-                {"role": "user", "content": _build_headlines_prompt(news)},
-            ],
-        )
-        return message.content[0].text
+        return _call_gemini(_SYSTEM_PROMPT, _build_headlines_prompt(news))
     except Exception:
         return _fallback_summary(news)
 
 
 def _fallback_summary(news: DailyNewsSources) -> str:
-    """Plain-text summary when Claude API is unavailable."""
+    """Plain-text summary when Gemini API is unavailable."""
     parts: list[str] = [f"# Daily Brief — {news.date.isoformat()}\n"]
 
     counts = [
@@ -127,7 +145,7 @@ def _fallback_summary(news: DailyNewsSources) -> str:
             parts.append(f"- **{item.title}** ({item.summary})")
 
     parts.append(
-        "\n*AI analysis unavailable — set ANTHROPIC_API_KEY or "
-        "anthropic_api_key in news_config.json for opinionated briefing.*"
+        "\n*AI analysis unavailable — set GEMINI_API_KEY for "
+        "opinionated briefing (free at https://aistudio.google.com/apikey).*"
     )
     return "\n".join(parts)

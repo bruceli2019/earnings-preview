@@ -62,7 +62,7 @@ def earnings(ticker: str) -> None:
     "--analyze/--no-analyze",
     "run_analysis",
     default=True,
-    help="Run AI analysis on collected headlines (requires ANTHROPIC_API_KEY).",
+    help="Run AI analysis on collected headlines (requires GEMINI_API_KEY).",
 )
 @click.option(
     "--open/--no-open",
@@ -160,11 +160,11 @@ def daily_news(
 
         if run_analysis:
             console.print("[bold cyan]Running AI analysis...[/bold cyan]")
-            news.analysis = analyze_news(news, api_key=cfg.anthropic_api_key)
+            news.analysis = analyze_news(news)
             if "unavailable" in news.analysis.lower():
                 console.print(
                     "  [yellow]AI analysis unavailable — "
-                    "set ANTHROPIC_API_KEY for full brief[/yellow]"
+                    "set GEMINI_API_KEY for full brief[/yellow]"
                 )
             else:
                 console.print("  [dim]Analysis complete[/dim]")
