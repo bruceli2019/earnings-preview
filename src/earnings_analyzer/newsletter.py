@@ -37,6 +37,41 @@ def _render_news_section(title: str, icon: str, items: list[NewsItem]) -> str:
     </div>"""
 
 
+def _render_viral_tweets_section(items: list[NewsItem]) -> str:
+    """Render viral tweets with tweet text and cross-post context."""
+    if not items:
+        return ""
+
+    rows = []
+    for item in items:
+        # Split summary into tweet text and sharing context
+        parts = item.summary.split(" | Shared on ", 1)
+        tweet_text = _esc(parts[0]) if parts else ""
+        context_html = ""
+        if len(parts) > 1:
+            context_html = (
+                f'<p class="tweet-context">Shared on {_esc(parts[1])}</p>'
+            )
+
+        rows.append(
+            f"""        <div class="news-item tweet-card">
+          <div class="tweet-author">
+            <a href="{_esc(item.url)}" target="_blank" rel="noopener">{_esc(item.title)}</a>
+            <span class="source-badge">{_esc(item.source)}</span>
+          </div>
+          <p class="tweet-text">{tweet_text}</p>
+          {context_html}
+        </div>"""
+        )
+
+    return f"""
+    <div class="section">
+      <h2>&#x1F525; Viral Tweets</h2>
+      <p class="section-subtitle">Tweets that escaped X — shared across Techmeme, HN, and Reddit</p>
+      {"".join(rows)}
+    </div>"""
+
+
 def _render_analysis_section(analysis_md: str) -> str:
     """Render the AI analysis as an HTML section with simple markdown."""
     if not analysis_md:
@@ -86,6 +121,7 @@ def render_newsletter(news: DailyNewsSources) -> str:
 
     sections = [
         _render_analysis_section(news.analysis),
+        _render_viral_tweets_section(news.viral_tweets),
         _render_news_section("Techmeme Headlines", "&#x1F4F0;", news.techmeme_headlines),
         _render_news_section("Hacker News", "&#x1F4E1;", news.hacker_news),
         _render_news_section("Reddit Finance", "&#x1F4AC;", news.reddit_finance),
@@ -161,6 +197,33 @@ def render_newsletter(news: DailyNewsSources) -> str:
       margin-bottom: 0.75rem;
       padding-bottom: 0.4rem;
       border-bottom: 1px solid var(--border);
+    }}
+    .section-subtitle {{
+      color: var(--muted);
+      font-size: 0.8rem;
+      margin-top: -0.5rem;
+      margin-bottom: 0.75rem;
+    }}
+    /* Viral tweet cards */
+    .tweet-card {{
+      border-left: 3px solid var(--accent-light);
+    }}
+    .tweet-author a {{
+      color: var(--accent-light) !important;
+      font-weight: 600;
+    }}
+    .tweet-text {{
+      color: var(--text);
+      font-size: 0.9rem;
+      margin-top: 0.4rem;
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }}
+    .tweet-context {{
+      color: var(--green);
+      font-size: 0.75rem;
+      margin-top: 0.4rem;
+      font-style: italic;
     }}
     .news-item {{
       background: var(--card);

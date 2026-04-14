@@ -10,6 +10,8 @@ import pytest
 from earnings_analyzer.news_sources import (
     DailyNewsSources,
     NewsItem,
+    _extract_tweet_urls,
+    _find_sharing_context,
     _sanitize_url,
     fetch_ft_articles,
     fetch_spotify_episodes,
@@ -292,3 +294,125 @@ def test_fallback_summary_empty_sources():
     summary = _fallback_summary(news)
     assert "Daily Brief" in summary
     assert "GEMINI_API_KEY" in summary
+
+
+# ---------------------------------------------------------------------------
+# viral tweet extraction tests
+# ---------------------------------------------------------------------------
+
+
+def test_extract_tweet_urls_from_sources():
+    sources = [
+        [
+            NewsItem(
+                title="Article about a tweet",
+                url="https://x.com/elonmusk/status/123456789",
+                source="Techmeme",
+            ),
+            NewsItem(
+                title="Normal article",
+                url="https://example.com/article",
+                source="Techmeme",
+            ),
+        ],
+        [
+            NewsItem(
+                title="HN post linking a tweet",
+                url="https://twitter.com/naval/status/987654321",
+                source="Hacker News",
+            ),
+        ],
+    ]
+    urls = _extract_tweet_urls(sources)
+    assert len(urls) == 2
+    assert "https://x.com/elonmusk/status/123456789" in urls
+    assert "https://x.com/naval/status/987654321" in urls
+
+
+def test_extract_tweet_urls_deduplicates():
+    sources = [
+        [
+            NewsItem(
+                title="A",
+                url="https://x.com/user/status/111",
+                source="Techmeme",
+            ),
+        ],
+        [
+            NewsItem(
+                title="B",
+                url="https://twitter.com/user/status/111",
+                source="HN",
+            ),
+        ],
+    ]
+    urls = _extract_tweet_urls(sources)
+    assert len(urls) == 1
+
+
+def test_extract_tweet_urls_empty_when_no_tweets():
+    sources = [
+        [
+            NewsItem(title="A", url="https://example.com", source="Techmeme"),
+        ],
+    ]
+    urls = _extract_tweet_urls(sources)
+    assert urls == []
+
+
+def test_find_sharing_context():
+    tweet_url = "https://x.com/user/status/555"
+    sources = [
+        [
+            NewsItem(
+                title="Discussion about the tweet",
+                url="https://x.com/user/status/555",
+                source="Techmeme",
+            ),
+        ],
+        [
+            NewsItem(
+                title="HN thread",
+                url="https://news.ycombinator.com/item?id=99",
+                source="Hacker News",
+                summary="links to https://x.com/user/status/555",
+            ),
+        ],
+    ]
+    context = _find_sharing_context(tweet_url, sources)
+    assert "Techmeme" in context
+    assert "Hacker News" in context
+
+
+def test_find_sharing_context_excludes_x_source():
+    tweet_url = "https://x.com/user/status/555"
+    sources = [
+        [
+            NewsItem(
+                title="X topic",
+                url="https://x.com/user/status/555",
+                source="@someuser",
+            ),
+        ],
+    ]
+    context = _find_sharing_context(tweet_url, sources)
+    assert context == ""
+
+
+def test_render_newsletter_contains_viral_tweets():
+    news = DailyNewsSources(
+        date=date(2026, 4, 4),
+        viral_tweets=[
+            NewsItem(
+                title="@someuser",
+                url="https://x.com/someuser/status/123",
+                source="X (via cross-post)",
+                summary="Big news today | Shared on Techmeme: Article title",
+            ),
+        ],
+    )
+    html = render_newsletter(news)
+    assert "Viral Tweets" in html
+    assert "@someuser" in html
+    assert "Big news today" in html
+    assert "Shared on Techmeme" in html

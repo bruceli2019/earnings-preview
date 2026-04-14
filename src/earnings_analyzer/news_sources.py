@@ -36,6 +36,7 @@ class DailyNewsSources:
     sec_filings: list[NewsItem] = field(default_factory=list)
     arxiv_papers: list[NewsItem] = field(default_factory=list)
     hf_papers: list[NewsItem] = field(default_factory=list)
+    viral_tweets: list[NewsItem] = field(default_factory=list)
     analysis: str = ""
 
 
@@ -817,6 +818,108 @@ def fetch_spotify_episodes(
 
 
 # ---------------------------------------------------------------------------
+# Viral tweet extraction (cross-source + oEmbed)
+# ---------------------------------------------------------------------------
+
+_TWEET_URL_RE = re.compile(
+    r"https?://(?:x\.com|twitter\.com)/(\w+)/status/(\d+)",
+)
+
+_OEMBED_URL = "https://publish.twitter.com/oembed"
+
+
+def _extract_tweet_urls(sources: list[list[NewsItem]]) -> list[str]:
+    """Scan all collected news items for tweet/X URLs."""
+    urls: list[str] = []
+    seen_ids: set[str] = set()
+
+    for source_list in sources:
+        for item in source_list:
+            for text in (item.url, item.summary):
+                for m in _TWEET_URL_RE.finditer(text):
+                    tweet_id = m.group(2)
+                    if tweet_id not in seen_ids:
+                        seen_ids.add(tweet_id)
+                        urls.append(
+                            f"https://x.com/{m.group(1)}/status/{tweet_id}"
+                        )
+    return urls
+
+
+def _find_sharing_context(
+    tweet_url: str,
+    sources: list[list[NewsItem]],
+) -> str:
+    """Find which non-X source shared this tweet (the commentary layer)."""
+    tweet_id = _TWEET_URL_RE.search(tweet_url)
+    if not tweet_id:
+        return ""
+    tid = tweet_id.group(2)
+
+    contexts: list[str] = []
+    for source_list in sources:
+        for item in source_list:
+            if item.source.startswith("@") or item.source == "X":
+                continue
+            if tid in item.url or tid in item.summary:
+                contexts.append(f"Shared on {item.source}: {item.title[:100]}")
+    return " | ".join(contexts[:3])
+
+
+def fetch_viral_tweets(
+    sources: list[list[NewsItem]],
+    max_items: int = 10,
+) -> list[NewsItem]:
+    """Extract tweet URLs from other sources, enrich via oEmbed.
+
+    Tweets that got shared on Techmeme, HN, or Reddit are inherently
+    higher-signal — someone outside X found them worth discussing.
+    The oEmbed API is free and needs no authentication.
+    """
+    max_items = min(max(1, max_items), 50)
+    tweet_urls = _extract_tweet_urls(sources)
+    if not tweet_urls:
+        return []
+
+    items: list[NewsItem] = []
+    for tweet_url in tweet_urls[:max_items * 2]:
+        try:
+            resp = _safe_get(
+                _OEMBED_URL,
+                params={"url": tweet_url, "omit_script": "true"},
+                timeout=8,
+            )
+            data = resp.json()
+        except (httpx.HTTPError, ValueError, KeyError):
+            continue
+
+        author = data.get("author_name", "Unknown")
+        raw_html = data.get("html", "")
+        if raw_html:
+            text = BeautifulSoup(raw_html, "lxml").get_text(strip=True)[:300]
+        else:
+            text = ""
+
+        context = _find_sharing_context(tweet_url, sources)
+        summary_parts = [text]
+        if context:
+            summary_parts.append(context)
+
+        items.append(
+            NewsItem(
+                title=f"@{author}",
+                url=tweet_url,
+                source="X (via cross-post)",
+                summary=" | ".join(summary_parts)[:500],
+            )
+        )
+        if len(items) >= max_items:
+            break
+
+    return items
+
+
+# ---------------------------------------------------------------------------
 # Aggregate all sources
 # ---------------------------------------------------------------------------
 
@@ -836,16 +939,23 @@ def gather_daily_news(
     sec_form_types: list[str] | None = None,
 ) -> DailyNewsSources:
     """Collect news from all configured sources."""
+    techmeme = fetch_techmeme_headlines(max_items=techmeme_count)
+    hn = fetch_hacker_news(max_items=hn_count)
+    reddit = fetch_reddit_finance(
+        max_items=reddit_count, subreddits=reddit_subreddits
+    )
+    sec = fetch_sec_filings(form_types=sec_form_types, max_items=sec_count)
+
+    # Extract tweets that escaped X via other platforms
+    viral = fetch_viral_tweets(sources=[techmeme, hn, reddit, sec])
+
     return DailyNewsSources(
         date=date.today(),
-        techmeme_headlines=fetch_techmeme_headlines(max_items=techmeme_count),
-        hacker_news=fetch_hacker_news(max_items=hn_count),
-        reddit_finance=fetch_reddit_finance(
-            max_items=reddit_count, subreddits=reddit_subreddits
-        ),
-        sec_filings=fetch_sec_filings(
-            form_types=sec_form_types, max_items=sec_count
-        ),
+        techmeme_headlines=techmeme,
+        hacker_news=hn,
+        reddit_finance=reddit,
+        sec_filings=sec,
+        viral_tweets=viral,
         x_links=fetch_x_posts(accounts=x_accounts, bearer_token=x_bearer_token),
         ft_links=fetch_ft_articles(sections=ft_sections),
         spotify_links=fetch_spotify_episodes(shows=spotify_podcasts),
