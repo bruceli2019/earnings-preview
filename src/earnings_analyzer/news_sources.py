@@ -324,6 +324,13 @@ def _fetch_x_via_api(
     max_per_account: int,
 ) -> list[NewsItem]:
     """Fetch tweets via X API v2 (requires bearer token)."""
+    from datetime import datetime, timedelta, timezone
+
+    # Only fetch tweets from the last 48 hours to avoid stale content
+    start_time = (
+        datetime.now(timezone.utc) - timedelta(hours=48)
+    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+
     items: list[NewsItem] = []
     for handle in accounts:
         if not re.match(r"^[A-Za-z0-9_]{1,30}$", handle):
@@ -336,6 +343,7 @@ def _fetch_x_via_api(
                     "query": f"from:{handle} -is:retweet",
                     "max_results": str(min(max_per_account, 10)),
                     "tweet.fields": "text,created_at,author_id",
+                    "start_time": start_time,
                 },
             )
             data = resp.json()
@@ -352,7 +360,7 @@ def _fetch_x_via_api(
                     title=text,
                     url=f"https://x.com/{handle}/status/{tweet_id}",
                     source=f"@{handle}",
-                    summary="",
+                    summary=tweet.get("created_at", ""),
                 )
             )
     return items
@@ -373,6 +381,7 @@ def _fetch_x_via_browser(
         return []
 
     items: list[NewsItem] = []
+    seen_urls: set[str] = set()
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
@@ -408,6 +417,16 @@ def _fetch_x_via_browser(
                 for tweet_el in tweets:
                     if count >= max_per_account:
                         break
+
+                    # Skip pinned tweets — they have a "Pinned" label
+                    social_context = tweet_el.query_selector(
+                        '[data-testid="socialContext"]'
+                    )
+                    if social_context:
+                        label = social_context.inner_text().strip().lower()
+                        if "pinned" in label:
+                            continue
+
                     # Extract tweet text
                     text_el = tweet_el.query_selector(
                         '[data-testid="tweetText"]'
@@ -425,6 +444,10 @@ def _fetch_x_via_browser(
                         url = f"https://x.com{href}" if href.startswith("/") else href
                     else:
                         url = f"https://x.com/{handle}"
+
+                    if url in seen_urls:
+                        continue
+                    seen_urls.add(url)
 
                     items.append(
                         NewsItem(
@@ -496,14 +519,15 @@ def _fetch_x_via_syndication(
 def fetch_x_posts(
     accounts: list[str] | None = None,
     bearer_token: str | None = None,
-    max_per_account: int = 1,
-    max_total: int = 5,
+    max_per_account: int = 3,
+    max_total: int = 15,
 ) -> list[NewsItem]:
     """Fetch recent posts from X accounts.
 
     Tries in order: API v2 (bearer token) > Playwright (headless browser)
     > syndication embed (rate-limited fallback).
-    With many accounts, returns at most *max_total* posts for diversity.
+    Fetches multiple tweets per account to avoid returning only pinned/stale
+    content.  Returns at most *max_total* posts for diversity.
     """
     accts = accounts or _DEFAULT_X_ACCOUNTS
     if bearer_token:
@@ -512,7 +536,7 @@ def fetch_x_posts(
     items = _fetch_x_via_browser(accts, max_per_account)
     if items:
         return items[:max_total]
-    # Last resort: syndication
+    # Last resort: syndication (may be stale — fetch more and dedupe)
     return _fetch_x_via_syndication(accts, max_per_account)[:max_total]
 
 
