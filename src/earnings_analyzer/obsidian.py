@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from earnings_analyzer.news_sources import DailyNewsSources, NewsItem
+from earnings_analyzer.news_sources_types import DailyNewsSources, NewsItem
 
 # Regex to parse a markdown link item line:  - [title](url) `source`
 _ITEM_RE = re.compile(

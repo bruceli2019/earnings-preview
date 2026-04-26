@@ -5,7 +5,7 @@ from __future__ import annotations
 import html
 from pathlib import Path
 
-from earnings_analyzer.news_sources import DailyNewsSources, NewsItem
+from earnings_analyzer.news_sources_types import DailyNewsSources, NewsItem
 
 
 def _esc(text: str) -> str:

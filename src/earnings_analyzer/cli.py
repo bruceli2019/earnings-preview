@@ -143,10 +143,8 @@ def daily_news(
             spotify_podcasts=cfg.spotify_podcasts,
             reddit_subreddits=cfg.reddit_subreddits,
             sec_form_types=cfg.sec_form_types,
+            target_date=note_date,
         )
-
-        if note_date:
-            news.date = note_date
 
         total = (
             len(news.techmeme_headlines)

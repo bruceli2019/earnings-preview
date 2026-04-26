@@ -12,7 +12,7 @@ from __future__ import annotations
 import os
 import time
 
-from earnings_analyzer.news_sources import DailyNewsSources, NewsItem
+from earnings_analyzer.news_sources_types import DailyNewsSources, NewsItem
 
 
 _SYSTEM_PROMPT = """\
